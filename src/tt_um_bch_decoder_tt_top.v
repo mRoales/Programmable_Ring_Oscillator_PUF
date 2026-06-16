@@ -22,6 +22,8 @@ module tt_um_bch_decoder_tt_top #(
     input  wire          clk,
     input  wire          rst_n,
 
+    input  wire          ena,   // Required by TT. Always ON when the design is powered
+
     // Input Interface
     input  wire          valid_in,
     input  wire          sop_in,   // Start of Packet (first 16 bits)
@@ -155,6 +157,9 @@ module tt_um_bch_decoder_tt_top #(
             // Set the latch when the iBMA finishes, hold it indefinitely
             locator_ready_latch <= 1'b1;
         end
+        
     end
+    
+wire _unused_pins = &{ena, 1'b0};
 
 endmodule
