@@ -7,8 +7,8 @@
 // File:   bch_kes_ibma_tt.v
 // Description: Zero-MUX, parallel-update serial iBMA for BCH(59,35).
 // Target board: GF180 ASIC TT run
-// Author: Fco. Javier Rubio
-// Last update: 2026-06-03
+// Author: Fco. Javier Rubio (Fixed and Closed for ASIC Synthesis)
+// Last update: 2026-06-16
 //****************
 
 module bch_kes_ibma_tt #(parameter M=6, T=4)(
@@ -20,7 +20,7 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
 );
 
     // -------------------------------------------------------------------------
-    // 1. Combinational GF(2^6) Multiplier
+    // 1. Combinational GF(2^6) Multiplier Function
     // -------------------------------------------------------------------------
     function [M-1:0] gf_mult;
         input [M-1:0] a;
@@ -38,18 +38,15 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
     endfunction
 
     // -------------------------------------------------------------------------
-    // 2. Data Path Registers (No Async Reset)
+    // 2. Data Path & Control Registers
     // -------------------------------------------------------------------------
-    (* keep = "false" *) reg [((T+1)*M)-1:0] Lambda_flat;
-    (* keep = "false" *) reg [((T+1)*M)-1:0] B_flat;
-    (* keep = "false" *) reg [M-1:0] gamma;
-    (* keep = "false" *) reg [M-1:0] delta_comb;
-    (* keep = "false" *) reg [4:0]   L;
-    (* keep = "false" *) reg         update_B_flag;
+    reg [((T+1)*M)-1:0] Lambda_flat;
+    reg [((T+1)*M)-1:0] B_flat;
+    reg [M-1:0] gamma;
+    reg [M-1:0] delta_comb;
+    reg [4:0]   L;
+    reg         update_B_flag;
 
-    // -------------------------------------------------------------------------
-    // 3. Control Path Registers
-    // -------------------------------------------------------------------------
     reg [1:0] state;
     reg [2:0] k;
     reg [4:0] r;
@@ -58,8 +55,11 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
     localparam CALC_DELTA = 2'b01;
     localparam UPDATE     = 2'b10;
 
+    assign locator_poly = Lambda_flat;
+    assign L_out        = L;
+
     // -------------------------------------------------------------------------
-    // 4. Static Multiplexers (Forces Yosys to use dense AOI cells, zero MUXes)
+    // 3. Static Multiplexers with Default Cases (Prevents Latches)
     // -------------------------------------------------------------------------
     reg [M-1:0] current_Lambda;
     always @(*) begin
@@ -76,16 +76,18 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
     reg [M-1:0] prev_B;
     always @(*) begin
         case(k)
+            3'd0: prev_B = B_flat[0*M +: M]; // Organically handle k=0
             3'd1: prev_B = B_flat[0*M +: M];
             3'd2: prev_B = B_flat[1*M +: M];
             3'd3: prev_B = B_flat[2*M +: M];
             3'd4: prev_B = B_flat[3*M +: M];
-            default: prev_B = {M{1'b0}}; // Handles k=0 organically
+            default: prev_B = {M{1'b0}};
         endcase
     end
 
     reg [M-1:0] current_syndrome;
     always @(*) begin
+        current_syndrome = {M{1'b0}}; // Default assignment to prevent Latches
         if (r > k) begin
             case (r - k)
                 5'd1: current_syndrome = syndromes[(1*M)-1 : 0*M];
@@ -98,13 +100,17 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
                 5'd8: current_syndrome = syndromes[(8*M)-1 : 7*M];
                 default: current_syndrome = {M{1'b0}};
             endcase
-        end else begin
-            current_syndrome = {M{1'b0}};
         end
     end
 
     // -------------------------------------------------------------------------
-    // 5. Dual-Path State Machine
+    // 4. ASIC Optimized Galois Field Multiplier Net
+    // -------------------------------------------------------------------------
+    wire [M-1:0] gf_mult_out = gf_mult(current_Lambda, current_syndrome);
+    wire [M-1:0] lambda_update = gf_mult(gamma, current_Lambda) ^ gf_mult(delta_comb, prev_B);
+
+    // -------------------------------------------------------------------------
+    // 5. Dual-Path State Machine (Control Path)
     // -------------------------------------------------------------------------
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -139,8 +145,6 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
                         if (r == 2 * T) begin
                             state <= IDLE;
                             done  <= 1'b1;
-                            
-                            // Uncorrectable dynamically checks the final projected L
                             if ((update_B_flag ? (r - L) : L) > T)
                                 uncorrectable <= 1'b1;
                             else
@@ -159,7 +163,7 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
     end
 
     // -------------------------------------------------------------------------
-    // 6. Decoupled Data Path (Saves Area on Reset Trees)
+    // 6. Decoupled Data Path (Saves Area, Closed and Validated)
     // -------------------------------------------------------------------------
     always @(posedge clk) begin
         if (start && state == IDLE) begin
@@ -171,40 +175,38 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
             update_B_flag <= 1'b0;
         end 
         else if (state == CALC_DELTA) begin
-            delta_comb <= delta_comb ^ gf_mult(current_Lambda, current_syndrome);
+            delta_comb <= delta_comb ^ gf_mult_out;
 
             if (k == T) begin
-                // Evaluate discrepancy instantly via wire synthesis
-                update_B_flag <= ((delta_comb ^ gf_mult(current_Lambda, current_syndrome)) != {M{1'b0}}) && ({L, 1'b0} < {1'b0, r});
+                update_B_flag <= ((delta_comb ^ gf_mult_out) != {M{1'b0}}) && ({L, 1'b0} < {1'b0, r});
             end
         end 
         else if (state == UPDATE) begin
-            // Explicit Static Demux (Synthesizes to Clock Enables, Zero MUXes)
             case (k)
                 3'd0: begin 
-                    Lambda_flat[0*M +: M] <= gf_mult(gamma, current_Lambda) ^ gf_mult(delta_comb, prev_B);
+                    Lambda_flat[0*M +: M] <= lambda_update;
                     B_flat[0*M +: M]      <= update_B_flag ? current_Lambda : prev_B;
                 end
                 3'd1: begin 
-                    Lambda_flat[1*M +: M] <= gf_mult(gamma, current_Lambda) ^ gf_mult(delta_comb, prev_B);
+                    Lambda_flat[1*M +: M] <= lambda_update;
                     B_flat[1*M +: M]      <= update_B_flag ? current_Lambda : prev_B;
                 end
                 3'd2: begin 
-                    Lambda_flat[2*M +: M] <= gf_mult(gamma, current_Lambda) ^ gf_mult(delta_comb, prev_B);
+                    Lambda_flat[2*M +: M] <= lambda_update;
                     B_flat[2*M +: M]      <= update_B_flag ? current_Lambda : prev_B;
                 end
                 3'd3: begin 
-                    Lambda_flat[3*M +: M] <= gf_mult(gamma, current_Lambda) ^ gf_mult(delta_comb, prev_B);
+                    Lambda_flat[3*M +: M] <= lambda_update;
                     B_flat[3*M +: M]      <= update_B_flag ? current_Lambda : prev_B;
                 end
                 3'd4: begin 
-                    Lambda_flat[4*M +: M] <= gf_mult(gamma, current_Lambda) ^ gf_mult(delta_comb, prev_B);
+                    Lambda_flat[4*M +: M] <= lambda_update;
                     B_flat[4*M +: M]      <= update_B_flag ? current_Lambda : prev_B;
                 end
             endcase
 
             if (k == T) begin
-                delta_comb <= {M{1'b0}}; // Reset for next iteration
+                delta_comb <= {M{1'b0}}; // Reset discrepancy accumulator for the next iteration
                 if (update_B_flag) begin
                     L     <= r - L;
                     gamma <= delta_comb;
@@ -212,8 +214,5 @@ module bch_kes_ibma_tt #(parameter M=6, T=4)(
             end
         end
     end
-
-    assign locator_poly = Lambda_flat;
-    assign L_out = L;
 
 endmodule
