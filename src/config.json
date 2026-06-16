@@ -33,7 +33,10 @@
 
   "//": "Configuration docs: https://librelane.readthedocs.io/en/latest/reference/configuration.html",
 
-  "SYNTH_EXTRA_MAPPING_COMMANDS": "dffunmap; techmap -map +/adff2dff.v;",
+  "PL_RESIZER_BUFFER_OUTPUT_PORTS": 0,
+
+  "//": "Allow use of specific cells",
+  "SYNTH_READ_BLACKBOX_LIB": 1,
 
   "//": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
   "//": "!!! DO NOT CHANGE ANYTHING BELOW THIS POINT !!!",
