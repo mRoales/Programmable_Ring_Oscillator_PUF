@@ -33,12 +33,10 @@
 
   "//": "Configuration docs: https://librelane.readthedocs.io/en/latest/reference/configuration.html",
 
-  "PL_RESIZER_BUFFER_OUTPUT_PORTS": 0,
-
-  "SYNTH_LATCH_MAP": "dir::latch_map.v",
-  "SYNTH_PARAMETERS": {
-    "DFF_UNMAP": 1
-  },
+  "DESIGN_REPAIR_BUFFER_OUTPUT_PORTS": false,
+  "SYNTH_READ_BLACKBOX_LIB": true,
+  "SYNTH_STRATEGY": "AREA 0",
+  "SYNTH_FLAT_TOP": true,
 
   "//": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
   "//": "!!! DO NOT CHANGE ANYTHING BELOW THIS POINT !!!",
