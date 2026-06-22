@@ -1,73 +1,99 @@
-# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
-# SPDX-License-Identifier: Apache-2.0
-
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, RisingEdge
-
+from cocotb.triggers import Timer, ClockCycles
 
 @cocotb.test()
 async def test_project(dut):
-    dut._log.info("Start")
-    data_to_send = [0, 1, 0, 0, 1, 1, 0, 1] 
+    dut._log.info("***********_____STARTING COCOTB SIMULATION_____***********")
     
-    # Set the clock period to 20 ns
-    clock = Clock(dut.clk, 20, unit="ns")
+    # ------------------------------------------------------------------------
+    # 1. Configuración del Reloj
+    # ------------------------------------------------------------------------
+    CLK_PRD = 20  # Período del reloj de 20ns configurado en tu inicio
+    clock = Clock(dut.clk, CLK_PRD, unit="ns")
     cocotb.start_soon(clock.start())
 
-    # Reset
-    dut._log.info("Reset")
-    dut.ena.value = 1
-    dut.ui_in.value = 0
-    dut.uio_in.value = 0
+    # ------------------------------------------------------------------------
+    # 2. Inicialización de Señales (Primer bloque initial de Verilog)
+    # ------------------------------------------------------------------------
     dut.rst_n.value = 0
-    await ClockCycles(dut.clk, 10)
-    dut.rst_n.value = 1
-    
-    dut._log.info("Test project behavior")
-    
-    # -------------------------------------------------------------------------
-    # 5. Serial transmission loop (Building entire integer masks for GL_TEST compatibility)
-    # -------------------------------------------------------------------------
-    for i in range(len(data_to_send)):
-        bit_actual = data_to_send[i]
-        
-        # Determine control flags based on the current bit index
-        # valid_in (bit 0) is always 1 during transmission
-        valid_in = 1
-        # sop_in (bit 1) is 1 ONLY on the first bit (i == 0)
-        sop_in = 1 if (i == 0) else 0
-        # eop_in (bit 2) is 0 during active data streaming
-        eop_in = 0
-        # data_in (bit 3) takes the actual bit from the data_to_send array
-        data_in = bit_actual
-        
-        # Combine all bits into a single integer vector: 
-        # ui_data = (data_in << 3) | (eop_in << 2) | (sop_in << 1) | (valid_in << 0)
-        ui_data = (data_in << 3) | (eop_in << 2) | (sop_in << 1) | (valid_in << 0)
-        
-        # Write the whole vector to the packed netlist pins at once
-        dut.ui_in.value = ui_data
-        
-        # Wait for the clock edge so the chip samples the bit
-        await RisingEdge(dut.clk)
-        
-    # -------------------------------------------------------------------------
-    # 6. End of Packet signal
-    # -------------------------------------------------------------------------
-    # After the loop, we drive: valid_in=1, sop_in=0, eop_in=1, data_in=0
-    # ui_data = (0 << 3) | (1 << 2) | (0 << 1) | (1 << 0) = 4'b0101 = decimal 5
-    dut.ui_in.value = (0 << 3) | (1 << 2) | (0 << 1) | (1 << 0)
-    await RisingEdge(dut.clk)
-    
-    # -------------------------------------------------------------------------
-    # 7. Clean up signals
-    # -------------------------------------------------------------------------
-    # Drive all control and data lines back to 0
-    dut.ui_in.value = 0
-    
-    # Wait some cycles to see the decoder output change
-    for _ in range(30):
-        await RisingEdge(dut.clk)
+    dut.i_sel_mux_0.value = 0
+    dut.i_sel_mux_1.value = 0
+    dut.i_n_inv.value = 0
+    dut.i_enable.value = 0
+    dut.i_tx_ready.value = 0
+    dut.i_op_mode.value = 0
 
-    dut._log.info("Test completed successfully")
+    # Espera inicial: 4 ciclos completos + desfase de 0.8 del período
+    await ClockCycles(dut.clk, 4)
+    await Timer(int(0.8 * CLK_PRD), units="ns")
+    dut.rst_n.value = 1
+
+    # ------------------------------------------------------------------------
+    # 3. Flujo Secuencial de Estímulos (Segundo bloque initial de Verilog)
+    # ------------------------------------------------------------------------
+    
+    # --- Bloque de Prueba 1 ---
+    await ClockCycles(dut.clk, 6)
+    await Timer(int(0.8 * CLK_PRD), units="ns")
+    dut.i_sel_mux_0.value = 0
+    dut.i_sel_mux_1.value = 1
+    dut.i_n_inv.value = 0
+
+    await ClockCycles(dut.clk, 4)
+    dut.i_enable.value = 1
+    
+    await ClockCycles(dut.clk, 4)
+    dut.i_tx_ready.value = 1
+    
+    await ClockCycles(dut.clk, 200)
+    
+    # --- Bloque de Prueba 2 (Reset y Cambio de Desafío) ---
+    dut.rst_n.value = 0
+    dut.i_enable.value = 0
+    
+    await ClockCycles(dut.clk, 4)
+    dut.rst_n.value = 1
+    dut.i_sel_mux_0.value = 0
+    dut.i_sel_mux_1.value = 2
+    dut.i_n_inv.value = 4
+    
+    await ClockCycles(dut.clk, 4)
+    dut.i_enable.value = 1
+    
+    await ClockCycles(dut.clk, 200)
+    
+    # --- Bloque de Prueba 3 ---
+    dut.rst_n.value = 0
+    dut.i_enable.value = 0
+    
+    await ClockCycles(dut.clk, 4)
+    dut.rst_n.value = 1
+    dut.i_sel_mux_0.value = 3
+    dut.i_sel_mux_1.value = 2
+    dut.i_n_inv.value = 0
+    
+    await ClockCycles(dut.clk, 4)
+    dut.i_enable.value = 1
+    
+    await ClockCycles(dut.clk, 200)
+    
+    # --- Bloque de Prueba 4 (Inyección de op_mode) ---
+    dut.rst_n.value = 0
+    dut.i_enable.value = 0
+    
+    await ClockCycles(dut.clk, 4)
+    dut.rst_n.value = 1
+    dut.i_sel_mux_0.value = 3
+    dut.i_sel_mux_1.value = 2
+    dut.i_n_inv.value = 0
+    
+    await ClockCycles(dut.clk, 4)
+    dut.i_enable.value = 1
+    
+    await ClockCycles(dut.clk, 20)
+    dut.i_op_mode.value = 1
+    
+    await ClockCycles(dut.clk, 20)
+    
+    dut._log.info("***********_____SIMULATION COMPLETED_____***********")
