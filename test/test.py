@@ -43,10 +43,10 @@ async def test_project(dut):
     dut.ui_in.value = generar_ui_in(sel_mux_0=0, sel_mux_1=0, n_inv=0, enable=0)
     dut.uio_in.value = generar_uio_in(tx_ready=0, op_mode=0)
 
-    # # Espera inicial: 4 ciclos completos + desfase de 0.8 del período
-    # await ClockCycles(dut.clk, 4)
-    # await Timer(int(0.8 * CLK_PRD), unit="ns")
-    # dut.rst_n.value = 1
+    # Espera inicial: 4 ciclos completos + desfase de 0.8 del período
+    await ClockCycles(dut.clk, 4)
+    await Timer(int(0.8 * CLK_PRD), unit="ns")
+    dut.rst_n.value = 1
 
     # # ------------------------------------------------------------------------
     # # 3. Flujo Secuencial de Estímulos Mapeados (Segundo bloque initial)
