@@ -76,6 +76,6 @@ module tt_um_ro_puf(
   // ---------------------------------------------------------------------
   // We feed the remaining ui_in bits and the uio_in bus into a dummy reduction AND gate.
   // This informs Verilator that we are intentionally aware of these unused signals.
-    wire _unused = &{uio_in[5:2], ena, 1'b0};
+    wire _unused = &{uio_in[5:2], uio_out[0:5], ena, 1'b0};
 
 endmodule
