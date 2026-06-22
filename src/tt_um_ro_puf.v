@@ -47,7 +47,8 @@ module tt_um_ro_puf(
     assign uio_out[7:6] = debug_done_out[NO_COUNTER-1:0];                // Mapea o_debug_done
 
     assign uio_oe = {2'b11, 4'b0000, 2'b00}; 
-    
+    assign uio_out[5:0] = 6'b000000;
+
  puf_top #(
         .PUF_LENGTH_CONFIG ( PUF_LENGTH_CONFIG ),
         .PUF_LENGTH        ( PUF_LENGTH        ),
@@ -76,6 +77,6 @@ module tt_um_ro_puf(
   // ---------------------------------------------------------------------
   // We feed the remaining ui_in bits and the uio_in bus into a dummy reduction AND gate.
   // This informs Verilator that we are intentionally aware of these unused signals.
-    wire _unused = &{uio_in[5:2], uio_out[0:5], ena, 1'b0};
+    wire _unused = &{uio_in[5:2], ena, 1'b0};
 
 endmodule
