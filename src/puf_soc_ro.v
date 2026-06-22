@@ -25,7 +25,7 @@ module puf_soc_ro #(
 );
 
     // Cables internos protegidos contra optimizaciones de síntesis
-    (* dont_touch = "true" *) wire  w_ring [NO_PUF_STAGE:0];
+	(* dont_touch = "true" *) wire  w_ring [NO_PUF_STAGE-1:0];
     (* dont_touch = "true" *) wire  w_ring2 [NO_PUF_STAGE-1:0];
     (* dont_touch = "true" *) wire  w_ring3 [NO_PUF_STAGE-1:0];
     (* dont_touch = "true" *) wire  w_ring4 [NO_PUF_STAGE-1:0];
